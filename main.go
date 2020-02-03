@@ -179,7 +179,7 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 		// Временный файл с добавленными случайными цифрами перед расширением создаётся в папке "temp-images"
 		tempFile, err := ioutil.TempFile("images", templateFilename)
 		defer tempFile.Close() // Отложенная операция закрытия файла
-		log.Println("  └", templateFilename,"is template for the file name")
+		log.Println("  └", templateFilename,"is the template to name the new file")
 		if err != nil {
 			log.Println(err)
 		}
