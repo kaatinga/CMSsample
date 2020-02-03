@@ -152,6 +152,9 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 		case strings.Contains(contentType, "text/xml") && file.Header["Content-Type"][0] == "image/svg+xml":
 			fileNameParts[1] = "svg"
 			contentType = file.Header["Content-Type"][0]
+		case strings.Contains(contentType, "text/plain") && file.Header["Content-Type"][0] == "image/svg+xml" && strings.Contains(string(sniff), "<svg"):
+			fileNameParts[1] = "svg"
+			contentType = file.Header["Content-Type"][0]
 		default: 							// завершаем MIME Content-type неверный
 			log.Println("  └ Restricted Content-Type. The file will not be saved")
 			continue
