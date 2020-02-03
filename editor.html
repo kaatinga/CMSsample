@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>CKEditor 5 – Classic editor</title>
+    <script src="/editor/ckeditor.js"></script>
+</head>
+<body>
+    <h1>Classic editor</h1>
+    <form method="post" action="/save/">
+        <label for="filename">Имя файла:</label> <input type="text" name="filename" id="filename"><br><br>
+    <textarea name="content" id="editor" class="editor">
+        &lt;p&gt;This is some sample content.&lt;/p&gt;
+    </textarea>
+        <button type="submit">Submit</button>
+    </form>
+    Заливка файлов:
+
+    <form enctype="multipart/form-data" action="/upload/" method="post">
+        <input type="file" name="files" multiple>
+        <input type="submit" value="upload">
+    </form>
+    <script>ClassicEditor
+            .create( document.querySelector( '#editor' ), {
+
+                toolbar: {
+                    items: [
+                        'heading',
+                        'fontFamily',
+                        'alignment',
+                        '|',
+                        'bold',
+                        'italic',
+                        'link',
+                        'underline',
+                        'strikethrough',
+                        'superscript',
+                        'subscript',
+                        'bulletedList',
+                        'numberedList',
+                        '|',
+                        'indent',
+                        'outdent',
+                        '|',
+                        'imageUpload',
+                        'blockQuote',
+                        'insertTable',
+                        'mediaEmbed',
+                        'undo',
+                        'redo',
+                        // 'CKFinder'
+                    ]
+                },
+                ckfinder: {
+                    uploadDir: '/images/',
+                    uploadUrl: '/upload/',
+                    options: {
+                        resourceType: 'Images'
+                    }
+                },
+                // simpleUpload: {
+                //     // The URL that the images are uploaded to.
+                //     uploadUrl: '/upload/',
+                //
+                //     // Headers sent along with the XMLHttpRequest to the upload server.
+                //     // headers: {
+                //     //     'X-CSRF-TOKEN': 'CSFR-Token',
+                //     //     Authorization: 'Bearer <JSON Web Token>'
+                //     // }
+                // },
+                language: 'en',
+                image: {
+                    toolbar: [
+                        'imageTextAlternative',
+                        'imageStyle:full',
+                        'imageStyle:side',
+                        // 'imageStyle:alignRight',
+                        // 'imageStyle:alignLeft'
+                    ]
+                },
+                table: {
+                    contentToolbar: [
+                        'tableColumn',
+                        'tableRow',
+                        'mergeTableCells'
+                    ]
+                },
+                // styles: [
+                //     // This option is equal to a situation where no style is applied.
+                //     'full',
+                //
+                //     // This represents an image aligned to the left.
+                //     'alignLeft',
+                //
+                //     // This represents an image aligned to the right.
+                //     'alignRight'
+                // ],
+                licenseKey: '',
+            } )
+            .then( editor => {
+                window.editor = editor;
+            } )
+            .catch( error => {
+                console.error( error );
+            } );
+    </script>
+</body>
+</html>
