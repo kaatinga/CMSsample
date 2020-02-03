@@ -102,7 +102,7 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 	reader, err := r.MultipartReader() // Разбираем multipartform
 	if err != nil {
 		fmt.Fprintln(w, err)
-		log.Println("└ Нет файлов...")
+		log.Println("└", err)
 		return
 	}
 
@@ -123,61 +123,58 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 			return // и завершаем работу хандлера
 		}
 
-		// Проверяем название файла
+		// Проверяем что это файл
 		if file.FileName() == "" {
-			log.Println("Zero file detected. Finished processing files")
-			return // и завершаем работу хандлера
+			log.Println("The data is not a file")
+			continue // и пропускаем данные если названия файла нет
 		}
 
-		log.Println("└", file.FileName(), "has been successfully retrieved form the request header")
+		log.Println("└", file.FileName(), "has been successfully retrieved from the request header")
 
-		log.Println("  └ Заявленный Content-Type:", file.Header["Content-Type"][0])
+		log.Println("  └ Announced by browser Content-Type:", file.Header["Content-Type"][0])
 
-		// Проверяем MIME Content-type
+		// Вынимаем реальный MIME Content-type
 		buf := bufio.NewReader(file)
 		sniff, _ := buf.Peek(512)
 		contentType := http.DetectContentType(sniff)
-		log.Println("  └ Реальный Content-Type:", contentType)
-		re := regexp.MustCompile(`image/(png|gif|jpeg)`) // переменная re содержит регулярку
-		MIMEtype := re.Find([]byte(contentType))
-		if MIMEtype == nil {
+		log.Println("  └ Real Content-Type:", contentType)
+
+		fileNameParts := make([]string, 2) // переменная для формирования нового названия файла
+		switch {							// устанавливаем новое расширение
+		case contentType == "image/png":
+			fileNameParts[1] = "png"
+		case contentType == "image/gif":
+			fileNameParts[1] = "gif"
+		case contentType == "image/jpeg":
+			fileNameParts[1] = "jpg"
+		case contentType == "image/svg+xml":
+			fileNameParts[1] = "svg"
+		default: 							// завершаем MIME Content-type неверный
 			log.Println("  └ Restricted Content-Type. The file will not be saved")
 			continue
 		}
+
 		log.Println("  └", file.FileName(), "has been successfully passed the MIME-type check")
 
-		re = regexp.MustCompile(`\.(?i)(png|jpg|gif|jpeg)$`)    // меняем шаблон регулярки !!! ТОЧКА НЕ ПРОВЕРЯЕТСЯ ПОКА !!!
-		extension := string(re.Find([]byte(file.FileName()))) // формируем расширение по шаблону выше
+		// вынимаем расширение из файла чтобы его отрезать
+		re := regexp.MustCompile(`\.(?i)(png|jpg|gif|jpeg)$`)    // переменная re содержит регулярку
+		extension := string(re.Find([]byte(file.FileName()))) 		// формируем расширение по шаблону выше
 		if extension == "" {
 			log.Println("  └ The file's extension is wrong. The file will not be saved")
 			continue
 		}
-		log.Println("  └", file.FileName(), "has an allowed extension")
+		log.Println("  └", file.FileName(), "has a correct extension")
 
-		// Проверяем расширение файла и создаём новую переменную extensionToCheck для проверки MIME-type
-		var extensionToCheck string
-		switch {
-		case strings.ToLower(extension) == ".jpg":
-			extensionToCheck = "jpeg"
-		default:
-			extensionToCheck = strings.ToLower(extension[1:])
-		}
-
-		log.Println("  └", extensionToCheck, "is extensionToCheck")
-
-		// Проверяем что MIME-type соответствует расширению
-		re = regexp.MustCompile(`(?i)(png|gif|jpeg)`)
-		if string(re.Find([]byte(contentType))) != extensionToCheck {
+		// Проверяем что MIME-type из файла из из браузера соответствуют друг другу
+		if file.Header["Content-Type"][0] != contentType {
 			log.Println("  └ The MIME-type and extension of the file do not match. The file will not be saved")
 			continue
 		}
 
 		// Формируем строку для ioutil.TempFile
-		fileNameParts := make([]string, 2)
-		fileNameParts[1] = extension[1:]                                  // .extension, убираем точку заодно
 		fileNameParts[0] = strings.TrimSuffix(file.FileName(), extension) // filename.
 		templateFilename := strings.Join(fileNameParts, "*.")             // filename*.extension
-		log.Println("  └", fileNameParts[1], "is extention.",fileNameParts[0],"is name")
+		log.Println("  └", fileNameParts[1], "is set extention for the new file.",fileNameParts[0],"is filename")
 
 		// Временный файл с добавленными случайными цифрами перед расширением создаётся в папке "temp-images"
 		tempFile, err := ioutil.TempFile("images", templateFilename)
