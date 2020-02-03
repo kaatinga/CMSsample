@@ -124,6 +124,7 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Проверяем что это файл
+		// log.Println(file)
 		if file.FileName() == "" {
 			log.Println("The data is not a file")
 			continue // и пропускаем данные если названия файла нет
@@ -147,8 +148,9 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 			fileNameParts[1] = "gif"
 		case contentType == "image/jpeg":
 			fileNameParts[1] = "jpg"
-		case contentType == "image/svg+xml":
+		case strings.Contains(contentType, "text/xml") && file.Header["Content-Type"][0] == "image/svg+xml":
 			fileNameParts[1] = "svg"
+			contentType = file.Header["Content-Type"][0]
 		default: 							// завершаем MIME Content-type неверный
 			log.Println("  └ Restricted Content-Type. The file will not be saved")
 			continue
@@ -157,7 +159,7 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 		log.Println("  └", file.FileName(), "has been successfully passed the MIME-type check")
 
 		// вынимаем расширение из файла чтобы его отрезать
-		re := regexp.MustCompile(`\.(?i)(png|jpg|gif|jpeg)$`)    // переменная re содержит регулярку
+		re := regexp.MustCompile(`\.(?i)(png|jpg|gif|jpeg|svg)$`)    // переменная re содержит регулярку
 		extension := string(re.Find([]byte(file.FileName()))) 		// формируем расширение по шаблону выше
 		if extension == "" {
 			log.Println("  └ The file's extension is wrong. The file will not be saved")
@@ -165,9 +167,9 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 		}
 		log.Println("  └", file.FileName(), "has a correct extension")
 
-		// Проверяем что MIME-type из файла из из браузера соответствуют друг другу
+		// Проверяем что MIME-type из файла из из браузера соответствуют друг другу, исключение - SVG
 		if file.Header["Content-Type"][0] != contentType {
-			log.Println("  └ The MIME-type and extension of the file do not match. The file will not be saved")
+			log.Println("  └ The MIME-types of the file do not match. The file will not be saved")
 			continue
 		}
 
@@ -179,7 +181,7 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 		// Временный файл с добавленными случайными цифрами перед расширением создаётся в папке "temp-images"
 		tempFile, err := ioutil.TempFile("images", templateFilename)
 		defer tempFile.Close() // Отложенная операция закрытия файла
-		log.Println("  └", templateFilename,"is the template to name the new file")
+		log.Println("  └", templateFilename,"is the template to name the uploaded file")
 		if err != nil {
 			log.Println(err)
 		}
@@ -198,7 +200,7 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 			log.Println(err)
 		} else {
 			// Сообщаем пользователю об успехе!
-			log.Println("  └", tempFile.Name(),"is path to file")
+			log.Println("  └", tempFile.Name(),"is the file path")
 			newFileName := tempFile.Name()[7:]
 			log.Println("  └", file.FileName(), "has been successfully saved. The new name is", newFileName)
 			fmt.Fprintf(w, `{
