@@ -177,7 +177,7 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 		// Формируем строку для ioutil.TempFile
 		fileNameParts[0] = strings.TrimSuffix(file.FileName(), extension) // filename.
 		templateFilename := strings.Join(fileNameParts, "*.")             // filename*.extension
-		log.Println("  └", fileNameParts[1], "is set extention for the new file.",fileNameParts[0],"is filename")
+		log.Println("  └", fileNameParts[1], "is the file extention.",fileNameParts[0],"is the filename")
 
 		// Временный файл с добавленными случайными цифрами перед расширением создаётся в папке "temp-images"
 		tempFile, err := ioutil.TempFile("images", templateFilename)
