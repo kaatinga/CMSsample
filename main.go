@@ -114,6 +114,7 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 
 		// Сначала проверяем на конец файла в текущей итерации
 		if err == io.EOF {
+			log.Println("└ The data array is depleted. Finished processing data")
 			break // выходим из цикла
 		}
 
@@ -126,7 +127,7 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 		// Проверяем что это файл
 		// log.Println(file)
 		if file.FileName() == "" {
-			log.Println("The data is not a file")
+			log.Println("└ The data is not a file. Passed")
 			continue // и пропускаем данные если названия файла нет
 		}
 
