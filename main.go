@@ -141,8 +141,8 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 		contentType := http.DetectContentType(sniff)
 		log.Println("  └ Real Content-Type:", contentType)
 
-		fileNameParts := make([]string, 2)  // переменная для формирования нового названия файла
-		switch {							// устанавливаем новое расширение для png-, gif- и jpg-файлов
+		fileNameParts := make([]string, 2)  	// переменная для формирования нового названия файла
+		switch {								// устанавливаем новое расширение для png-, gif- и jpg-файлов
 		case contentType == "image/png":
 			fileNameParts[1] = "png"
 		case contentType == "image/gif":
