@@ -142,13 +142,14 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 		log.Println("  └ Real Content-Type:", contentType)
 
 		fileNameParts := make([]string, 2) // переменная для формирования нового названия файла
-		switch {							// устанавливаем новое расширение и проверяем SVG-файлы
+		switch {							// устанавливаем новое расширение для png-, gif- и jpg-файлов
 		case contentType == "image/png":
 			fileNameParts[1] = "png"
 		case contentType == "image/gif":
 			fileNameParts[1] = "gif"
 		case contentType == "image/jpeg":
 			fileNameParts[1] = "jpg"
+		// проверяем SVG-файлы
 		case strings.Contains(contentType, "text/xml") && file.Header["Content-Type"][0] == "image/svg+xml":
 			fileNameParts[1] = "svg"
 			contentType = file.Header["Content-Type"][0]
