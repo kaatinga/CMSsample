@@ -37,7 +37,7 @@ func (p *Page) save() error {
 }
 
 func inlineLog(hiddenString, stringToLog string) string {
-	log.Println(hiddenString, stringToLog)
+	fmt.Println(hiddenString, stringToLog)
 	return stringToLog
 }
 
@@ -70,6 +70,9 @@ func save(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 }
 
 func main() {
+
+	// Устанавливаем сдвиг времени
+	moscow, _ = time.LoadLocation("Europe/Moscow")
 
 	// объявляем роутер
 	var m *Middleware

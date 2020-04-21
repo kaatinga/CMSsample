@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/julienschmidt/httprouter"
 	"log"
 	"net/http"
@@ -18,9 +19,9 @@ func newMiddleware(r *httprouter.Router) *Middleware {
 }
 
 // мидлвейр для всех хэндлеров
-func (rw *Middleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	log.Println("-------------------", time.Now().In(moscow).Format(http.TimeFormat), "A request is received -------------------")
-	log.Println("The request is from", r.RemoteAddr, "| Method:", r.Method, "| URI:", r.URL.String())
+func (m *Middleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("-------------------", time.Now().In(moscow).Format(http.TimeFormat), "A request is received -------------------")
+	fmt.Println("The request is from", r.RemoteAddr, "| Method:", r.Method, "| URI:", r.URL.String())
 
 	if r.Method == "POST" {
 		// проверяем размер POST данных
@@ -33,5 +34,5 @@ func (rw *Middleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	rw.router.ServeHTTP(w, r)
+	m.router.ServeHTTP(w, r)
 }
