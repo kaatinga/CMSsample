@@ -2,14 +2,28 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
+	"github.com/julienschmidt/httprouter"
 	"io"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
+	"os"
+	"os/signal"
 	"regexp"
 	"strings"
+	"syscall"
 	"time"
+)
+
+var (
+	moscow *time.Location // время
+)
+
+const (
+	port = "3000"
 )
 
 type Page struct {
@@ -27,82 +41,110 @@ func inlineLog(hiddenString, stringToLog string) string {
 	return stringToLog
 }
 
-func faviconHandler(w http.ResponseWriter, r *http.Request) {
-	log.Println("-------------------", time.Now().Format(http.TimeFormat), "A favicon.ico request is received -------------------")
-	log.Println("На сервер обратился клиент с адреса", r.RemoteAddr)
+func faviconHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	http.ServeFile(w, r, inlineLog("└ Файл будет передан по запросу:", "favicon.ico"))
 }
 
-func create(w http.ResponseWriter, r *http.Request) {
-	log.Println("-------------------", time.Now().Format(http.TimeFormat), "A common request is received -------------------")
-	log.Println("На сервер обратился клиент с адреса", r.RemoteAddr)
-	log.Println("Открываем редактор...")
+func create(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	http.ServeFile(w, r, "editor.html")
 }
 
-func save(w http.ResponseWriter, r *http.Request) {
-	log.Println("-------------------", time.Now().Format(http.TimeFormat), "A common request is received -------------------")
-	log.Println("На сервер обратился клиент с адреса", r.RemoteAddr)
-	log.Println("Проверяем метод...")
-	if r.Method == "POST" {
+func save(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+
 		var pageData Page
 		pageData.File = r.FormValue("filename")
 		pageData.Body = []byte(r.FormValue("content"))
-		log.Println("Новый файл будет создан", pageData.File)
+		fmt.Println("Новый файл будет создан", pageData.File)
+
 		err := pageData.save()
 		if err != nil {
-		    log.Println(err)
-		} else {
-			log.Println("Файл был записан")
+			log.Println(err)
+			return
 		}
-		fmt.Fprintf(w, "<a href=/read/%s>Открыть новый файл (%s)</a>", pageData.File, pageData.File)
-	} else {
-		log.Println("Неверный метод...")
-		http.Error(w, http.StatusText(405), 405)
-	}
+		fmt.Println("Файл был записан")
 
+		_, err = fmt.Fprintf(w, "<a href=/read/%s>Открыть новый файл (%s)</a>", pageData.File, pageData.File)
+		if err != nil {
+		    log.Println(err)
+		}
 }
 
 func main() {
 
-	http.Handle("/read/", http.StripPrefix("/read/", http.FileServer(http.Dir("read"))))
-	http.Handle("/images/", http.StripPrefix("/images/", http.FileServer(http.Dir("images"))))
-	http.Handle("/editor/", http.StripPrefix("/editor/", http.FileServer(http.Dir("editor"))))
+	// объявляем роутер
+	var m *Middleware
+	m = newMiddleware(
+		httprouter.New(),
+	)
 
-	http.HandleFunc("/create/", create)
-	http.HandleFunc("/save/", save)
-	http.HandleFunc("/upload/", uploadFile)
-	http.HandleFunc("/", index)
-	http.HandleFunc("/favicon.ico", faviconHandler) // Обработчик favicon.ico
+	webServer := http.Server{
+		Addr:    net.JoinHostPort("", port),
+		Handler: m,
+		//TLSConfig:         nil,
+		ReadTimeout:       1 * time.Minute,
+		ReadHeaderTimeout: 15 * time.Second,
+		WriteTimeout:      1 * time.Minute,
+		//IdleTimeout:       0,
+		//MaxHeaderBytes:    0,
+		//TLSNextProto:      nil,
+		//ConnState:         nil,
+		//ErrorLog:          nil,
+		//BaseContext:       nil,
+		//ConnContext:       nil,
+	}
 
+	m.router.ServeFiles("/read/*filepath", http.Dir("read"))
+	m.router.ServeFiles("/images/*filepath", http.Dir("images"))
+	m.router.ServeFiles("/editor/*filepath", http.Dir("editor"))
 
-	log.Println("Server starting...")
-	http.ListenAndServe(":3000", nil)
+	m.router.GET("/favicon.ico", faviconHandler)
+
+	m.router.GET("/create/", create)
+	m.router.POST("/save/", save)
+	m.router.POST("/upload/", uploadFile)
+	m.router.GET("/", index)
+
+	var err error
+
+	fmt.Println("Launching the service on the port:", port, "...")
+	go func() {
+		err = webServer.ListenAndServe()
+		if err != nil {
+			log.Println(err)
+		}
+	}()
+
+	fmt.Println("The server was launched!")
+
+	interrupt := make(chan os.Signal, 1)
+	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
+
+	<-interrupt
+
+	timeout, cancelFunc := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelFunc()
+
+	err = webServer.Shutdown(timeout)
+	if err != nil {
+		log.Println(err)
+	}
 }
 
-func index(w http.ResponseWriter, r *http.Request) {
-	log.Println("-------------------", time.Now().Format(http.TimeFormat), "A common request is received -------------------")
-	log.Println("На сервер обратился клиент с адреса", r.RemoteAddr)
-	log.Println("Открываем главную страницу...")
+func index(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	http.ServeFile(w, r, "index.html")
 }
 
-func uploadFile(w http.ResponseWriter, r *http.Request) {
-	log.Println("-------------------", time.Now().Format(http.TimeFormat), "File upload request is received -------------------")
-	log.Println("На сервер обратился клиент с адреса", r.RemoteAddr)
-
-	if r.Method != "POST" {
-		log.Println("└ Метод обращения не верный...")
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
+func uploadFile(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 
 	// Максимальный размер файлов 10 Мб
 	r.Body = http.MaxBytesReader(w, r.Body, 10<<20+512)
 	reader, err := r.MultipartReader() // Разбираем multipartform
 	if err != nil {
-		fmt.Fprintln(w, err)
 		log.Println("└", err)
+		_, err = fmt.Fprintln(w, err)
+		if err != nil {
+			log.Println(err)
+		}
 		return
 	}
 
@@ -131,18 +173,18 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 			continue // и пропускаем данные если названия файла нет
 		}
 
-		log.Println("└", file.FileName(), "has been successfully retrieved from the request header")
+		fmt.Println("└", file.FileName(), "has been successfully retrieved from the request header")
 
-		log.Println("  └ Announced by browser Content-Type:", file.Header["Content-Type"][0])
+		fmt.Println("  └ Announced by browser Content-Type:", file.Header["Content-Type"][0])
 
 		// Вынимаем реальный MIME Content-type
 		buf := bufio.NewReader(file)
 		sniff, _ := buf.Peek(512)
 		contentType := http.DetectContentType(sniff)
-		log.Println("  └ Real Content-Type:", contentType)
+		fmt.Println("  └ Real Content-Type:", contentType)
 
-		fileNameParts := make([]string, 2)  			// переменная для формирования нового названия файла
-		switch {										// устанавливаем новое расширение для png-, gif- и jpg-файлов
+		fileNameParts := make([]string, 2) // переменная для формирования нового названия файла
+		switch {                           // устанавливаем новое расширение для png-, gif- и jpg-файлов
 		case contentType == "image/png":
 			fileNameParts[1] = "png"
 		case contentType == "image/gif":
@@ -156,21 +198,21 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 		case strings.Contains(contentType, "text/plain") && file.Header["Content-Type"][0] == "image/svg+xml" && strings.Contains(string(sniff), "<svg"):
 			fileNameParts[1] = "svg"
 			contentType = file.Header["Content-Type"][0]
-		default: 							// завершаем MIME Content-type неверный
+		default: // завершаем MIME Content-type неверный
 			log.Println("  └ Restricted Content-Type. The file will not be saved")
 			continue
 		}
 
-		log.Println("  └", file.FileName(), "has been successfully passed the MIME-type check")
+		fmt.Println("  └", file.FileName(), "has been successfully passed the MIME-type check")
 
 		// вынимаем расширение из файла чтобы его отрезать
-		re := regexp.MustCompile(`\.(?i)(png|jpg|gif|jpeg|svg)$`)    // переменная re содержит регулярку
-		extension := string(re.Find([]byte(file.FileName()))) 		// формируем расширение по шаблону выше
+		re := regexp.MustCompile(`\.(?i)(png|jpg|gif|jpeg|svg)$`) // переменная re содержит регулярку
+		extension := string(re.Find([]byte(file.FileName())))     // формируем расширение по шаблону выше
 		if extension == "" {
 			log.Println("  └ The file's extension is wrong. The file will not be saved")
 			continue
 		}
-		log.Println("  └", file.FileName(), "has a correct extension")
+		fmt.Println("  └", file.FileName(), "has a correct extension")
 
 		// Проверяем что MIME-type из файла из из браузера соответствуют друг другу, исключение - SVG
 		if file.Header["Content-Type"][0] != contentType {
@@ -181,12 +223,12 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 		// Формируем строку для ioutil.TempFile
 		fileNameParts[0] = strings.TrimSuffix(file.FileName(), extension) // filename.
 		templateFilename := strings.Join(fileNameParts, "*.")             // filename*.extension
-		log.Println("  └", fileNameParts[1], "is the file extention.",fileNameParts[0],"is the filename")
+		log.Println("  └", fileNameParts[1], "is the file extention.", fileNameParts[0], "is the filename")
 
 		// Временный файл с добавленными случайными цифрами перед расширением создаётся в папке "temp-images"
 		tempFile, err := ioutil.TempFile("images", templateFilename)
 		defer tempFile.Close() // Отложенная операция закрытия файла
-		log.Println("  └", templateFilename,"is the template to name the uploaded file")
+		log.Println("  └", templateFilename, "is the template to name the uploaded file")
 		if err != nil {
 			log.Println(err)
 		}
@@ -205,16 +247,17 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 			log.Println(err)
 		} else {
 			// Сообщаем пользователю об успехе!
-			log.Println("  └", tempFile.Name(),"is the file path")
+			fmt.Println("  └", tempFile.Name(), "is the file path")
 			newFileName := tempFile.Name()[7:]
-			log.Println("  └", file.FileName(), "has been successfully saved. The new name is", newFileName)
-			fmt.Fprintf(w, `{
+			fmt.Println("  └", file.FileName(), "has been successfully saved. The new name is", newFileName)
+			_, err = fmt.Fprintf(w, `{
 	"uploaded": true,
 	"url": "/images/%s"
 }
 			`, newFileName)
+			if err != nil {
+				log.Println(err)
+			}
 		}
 	}
 }
-
-
