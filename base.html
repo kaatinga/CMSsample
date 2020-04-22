@@ -1,0 +1,15 @@
+{{define "base"}}
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ .Title }}</title>
+</head>
+<body {{ if .Error }}bgcolor="#ff1493"{{else}}bgcolor="#8fbc8f"{{end}}>
+{{ if .Error }}{{ .Error }}{{end}}
+{{ if .String }}{{ .String }}{{end}}
+</body>
+</html>
+
+{{end}}

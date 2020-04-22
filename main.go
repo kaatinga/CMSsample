@@ -10,11 +10,14 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"syscall"
+	"text/template"
 	"time"
 )
 
@@ -26,12 +29,19 @@ const (
 	port = "3000"
 )
 
-type Page struct {
+type NewPage struct {
 	File string
 	Body []byte
 }
 
-func (p *Page) save() error {
+type ViewData struct {
+	render bool
+	String string
+	Title  string
+	Error  string
+}
+
+func (p *NewPage) save() error {
 	path := strings.Join([]string{"read", p.File}, "/")
 	return ioutil.WriteFile(path, p.Body, 0600)
 }
@@ -50,23 +60,59 @@ func create(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 }
 
 func save(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	renderData := r.Context().Value("rd").(*ViewData)
 
-		var pageData Page
-		pageData.File = r.FormValue("filename")
-		pageData.Body = []byte(r.FormValue("content"))
-		fmt.Println("Новый файл будет создан", pageData.File)
+	defer Render(w, renderData)
 
-		err := pageData.save()
+	var pageData NewPage
+	pageData.File = r.FormValue("filename")
+	if pageData.File == "" {
+		renderData.Error = "Имя файла не может быть пустым"
+		log.Println(renderData.Error)
+		return
+	}
+
+	pageData.Body = []byte(r.FormValue("content"))
+	fmt.Println("Новый файл будет создан", pageData.File)
+
+	err := pageData.save()
+	if err != nil {
+		renderData.Error = err.Error()
+		log.Println(renderData.Error)
+		return
+	}
+
+	renderData.render = true
+	fmt.Println("Файл был записан")
+
+	renderData.String = fmt.Sprintf("<a href=/post/%s>Открыть новую запись '%s'</a>", url.PathEscape(pageData.File), pageData.File)
+	renderData.Title = "Новая запись создана"
+}
+
+func Render(w http.ResponseWriter, renderData *ViewData) {
+	if renderData.render {
+		layout := filepath.Join("base.html")
+		var tmpl *template.Template
+		var err error
+
+		tmpl, err = template.ParseFiles(layout)
 		if err != nil {
+			// Вываливаем в лог кучу хлама для анализа. Нужно переписать и выводить в файл.
 			log.Println(err)
+			// Возвращаем ошибку пользователю
+			http.Error(w, http.StatusText(500), 500)
 			return
 		}
-		fmt.Println("Файл был записан")
 
-		_, err = fmt.Fprintf(w, "<a href=/read/%s>Открыть новый файл (%s)</a>", pageData.File, pageData.File)
+		err = tmpl.ExecuteTemplate(w, "base", *renderData)
 		if err != nil {
-		    log.Println(err)
+			log.Println(err.Error())
+			http.Error(w, http.StatusText(500), 500)
+			return
 		}
+
+		fmt.Println("Ошибки при формировании страницы по шаблону не обнаружено") // если ошибки нет
+	}
 }
 
 func main() {
@@ -96,6 +142,8 @@ func main() {
 		//ConnContext:       nil,
 	}
 
+	m.router.GET("/post/:file", Adapt(Read, Wrapper()))
+
 	m.router.ServeFiles("/read/*filepath", http.Dir("read"))
 	m.router.ServeFiles("/images/*filepath", http.Dir("images"))
 	m.router.ServeFiles("/editor/*filepath", http.Dir("editor"))
@@ -109,7 +157,7 @@ func main() {
 
 	var err error
 
-	fmt.Println("Launching the service on the port:", port, "...")
+	fmt.Println("Сервер будет запущен на порту:", port, "...")
 	go func() {
 		err = webServer.ListenAndServe()
 		if err != nil {
@@ -117,7 +165,7 @@ func main() {
 		}
 	}()
 
-	fmt.Println("The server was launched!")
+	fmt.Println("Сервер запущен!")
 
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
@@ -133,7 +181,36 @@ func main() {
 	}
 }
 
+func Read(w http.ResponseWriter, r *http.Request, file httprouter.Params) {
+	renderData := r.Context().Value("rd").(*ViewData)
+
+	var blogPost string
+
+	blogPost = file.ByName("file")
+	if blogPost == "" {
+		return
+	}
+
+	fmt.Printf("Мы ищем файл '%s'\n", blogPost)
+	path := filepath.Join("read", blogPost)
+
+	blogFile, err := os.Open(path)
+	if err != nil {
+		log.Println(err)
+	}
+
+	var blogFileData []byte
+	blogFileData, err = ioutil.ReadAll(blogFile)
+	if err != nil {
+		log.Println(err)
+	}
+
+	renderData.String = string(blogFileData)
+	renderData.render = true
+}
+
 func index(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+
 	http.ServeFile(w, r, "index.html")
 }
 
@@ -159,7 +236,7 @@ func uploadFile(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 
 		// Сначала проверяем на конец файла в текущей итерации
 		if err == io.EOF {
-			log.Println("└ The data array is depleted. Finished processing data")
+			fmt.Println("└ The data array is depleted. Finished processing data")
 			break // выходим из цикла
 		}
 
@@ -172,7 +249,7 @@ func uploadFile(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		// Проверяем что это файл
 		// log.Println(file)
 		if file.FileName() == "" {
-			log.Println("└ The data is not a file. Passed")
+			fmt.Println("└ The data is not a file. Passed")
 			continue // и пропускаем данные если названия файла нет
 		}
 
@@ -226,12 +303,12 @@ func uploadFile(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		// Формируем строку для ioutil.TempFile
 		fileNameParts[0] = strings.TrimSuffix(file.FileName(), extension) // filename.
 		templateFilename := strings.Join(fileNameParts, "*.")             // filename*.extension
-		log.Println("  └", fileNameParts[1], "is the file extention.", fileNameParts[0], "is the filename")
+		fmt.Println("  └", fileNameParts[1], "is the file extention.", fileNameParts[0], "is the filename")
 
 		// Временный файл с добавленными случайными цифрами перед расширением создаётся в папке "temp-images"
 		tempFile, err := ioutil.TempFile("images", templateFilename)
 		defer tempFile.Close() // Отложенная операция закрытия файла
-		log.Println("  └", templateFilename, "is the template to name the uploaded file")
+		fmt.Println("  └", templateFilename, "is the template to name the uploaded file")
 		if err != nil {
 			log.Println(err)
 		}
